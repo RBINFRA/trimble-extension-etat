@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recherche d'état IFC</title>
+
+  <link rel="preconnect" href="https://components.connect.trimble.com" />
+  <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
+
+  <style>
+    :root {
+      --primary: #1c4c96;
+      --primary-dark: #163c78;
+      --primary-light: #eaf1ff;
+      --primary-shadow-15: rgba(28, 76, 150, 0.15);
+      --primary-shadow-35: rgba(28, 76, 150, 0.35);
+      --accent: #529898;
+      --border: #d3dde3;
+      --surface: #f1f4f7;
+      --text: #1f2a3a;
+      --muted: #6b7785;
+      --summary-bg: #f6fafb;
+      --summary-text: #243345;
+      --summary-hover-bg: #e7f0f0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--surface);
+      font-size: 14px;
+    }
+
+    .app-layout {
+      padding: 14px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--border);
+      margin-bottom: 14px;
+    }
+
+    .card-title {
+      background: var(--primary);
+      color: white;
+      margin: -16px -16px 14px;
+      padding: 12px 16px;
+      border-radius: 12px 12px 0 0;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 11px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    button.primary {
+      display: block;
+      width: 100%;
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 2px 6px var(--primary-shadow-35);
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: var(--primary-dark);
+    }
+
+    .actions {
+      margin-top: 10px;
+    }
+
+    button.secondary {
+      display: block;
+      width: 100%;
+      background: var(--summary-bg);
+      color: var(--summary-text);
+      border: 1px solid var(--border);
+    }
+
+    button.secondary:hover:not(:disabled) {
+      background: var(--summary-hover-bg);
+      border-color: var(--primary);
+    }
+
+    /* Légende interactive : sert à la fois d'affichage des couleurs et de filtre de recherche */
+    .legend-list {
+      list-style: none;
+      margin: 14px 0 4px;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--summary-bg);
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .legend-row:hover {
+      background: var(--summary-hover-bg);
+      border-color: var(--primary);
+    }
+
+    .legend-row.disabled {
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    .legend-swatch {
+      width: 28px;
+      height: 20px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+    }
+
+    .legend-swatch.small {
+      width: 20px;
+      height: 16px;
+    }
+
+    .legend-label {
+      flex: 1;
+      font-weight: 600;
+      color: var(--summary-text);
+      font-size: 14px;
+    }
+
+    .legend-badge,
+    .badge {
+      background: var(--primary);
+      color: white;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-weight: 600;
+      font-size: 12px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    .status {
+      margin-top: 12px;
+      padding: 10px;
+      background: var(--summary-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-height: 20px;
+      white-space: pre-line;
+      font-size: 13px;
+      color: var(--summary-text);
+    }
+
+    .loading-progress {
+      width: 100%;
+      background: #e5e7eb;
+      border-radius: 8px;
+      height: 10px;
+      overflow: hidden;
+      margin-top: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .loading-progress .progress-bar {
+      height: 100%;
+      width: 0;
+      background: var(--primary);
+      transition: width 0.2s ease;
+    }
+
+    .progress-text {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    #resultCount {
+      font-size: 13px;
+      margin-bottom: 10px;
+      color: var(--muted);
+    }
+
+    .summary-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .summary-list li {
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--summary-bg);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--summary-text);
+      gap: 8px;
+    }
+
+    .summary-list li.summary-section-title {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      text-transform: uppercase;
+      justify-content: flex-start;
+      gap: 8px;
+      letter-spacing: 0.2px;
+      border-color: var(--primary);
+      margin-top: 6px;
+    }
+
+    .summary-list li.summary-section-title:first-child {
+      margin-top: 0;
+    }
+
+    .summary-item-text {
+      display: block;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .summary-zone {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-layout">
+    <section class="card">
+      <div class="card-title">Recherche d'état</div>
+
+      <button class="primary" id="btnColoriserTout" onclick="coloriserTousEtats()">
+        Coloriser tous les états
+      </button>
+
+      <ul class="legend-list" id="legendList">
+        <li class="legend-row" data-etat="DEGRADE" onclick="filtrerEtat('DEGRADE')">
+          <span class="legend-swatch" style="background:#FF0000;"></span>
+          <span class="legend-label">DEGRADE</span>
+          <span class="legend-badge" id="badge-DEGRADE">–</span>
+        </li>
+        <li class="legend-row" data-etat="MEDIOCRE" onclick="filtrerEtat('MEDIOCRE')">
+          <span class="legend-swatch" style="background:#FFC000;"></span>
+          <span class="legend-label">MEDIOCRE</span>
+          <span class="legend-badge" id="badge-MEDIOCRE">–</span>
+        </li>
+        <li class="legend-row" data-etat="SATISFAISANT" onclick="filtrerEtat('SATISFAISANT')">
+          <span class="legend-swatch" style="background:#00B050;"></span>
+          <span class="legend-label">SATISFAISANT</span>
+          <span class="legend-badge" id="badge-SATISFAISANT">–</span>
+        </li>
+        <li class="legend-row" data-etat="CORRECT" onclick="filtrerEtat('CORRECT')">
+          <span class="legend-swatch" style="background:#92D050;"></span>
+          <span class="legend-label">CORRECT</span>
+          <span class="legend-badge" id="badge-CORRECT">–</span>
+        </li>
+      </ul>
+
+      <div class="actions">
+        <button class="secondary" id="btnReset" onclick="resetAffichage()">
+          Réinitialiser l'affichage
+        </button>
+      </div>
+
+      <div id="status" class="status">Chargement de l'add-on...</div>
+
+      <div id="loadingProgress" class="loading-progress hidden">
+        <div id="loadingProgressBar" class="progress-bar"></div>
+      </div>
+      <div id="loadingProgressText" class="progress-text hidden"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Résultats</div>
+      <div id="resultCount">Aucun résultat pour le moment.</div>
+      <ul id="summary" class="summary-list"></ul>
+    </section>
+  </div>
+
+  <script>
+    let API = null;
+    let enTraitement = false;
+    let dernierGroupes = null; // cache du dernier scan complet, invalidé par resetAffichage()
+
+    const CONFIG_ETAT = {
+      "DEGRADE": { color: "#FF0000", label: "DEGRADE" },
+      "MEDIOCRE": { color: "#FFC000", label: "MEDIOCRE" },
+      "SATISFAISANT": { color: "#00B050", label: "SATISFAISANT" },
+      "CORRECT": { color: "#92D050", label: "CORRECT" }
+    };
+
+    // Mots-clés utilisés pour retrouver la "zone" d'un élément, quel que soit
+    // le nom exact du pset/attribut utilisé dans les IFC (à adapter si besoin).
+    const MOTS_CLES_ZONE = ["ZONE", "LOCALISATION", "SECTEUR", "BATIMENT"];
+
+    function setStatus(message) {
+      document.getElementById("status").textContent = message;
+    }
+
+    function normaliserTexte(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toUpperCase();
+    }
+
+    async function init() {
+      try {
+        API = await TrimbleConnectWorkspace.connect(window.parent, (event, data) => {
+          console.log("Trimble event:", event, data);
+        });
+
+        setStatus("Add-on prêt.\nOuvre tes IFC dans le Viewer 3D, puis clique sur \"Coloriser tous les états\" ou sur un état de la légende pour lancer une recherche.");
+      } catch (error) {
+        console.error(error);
+        setStatus("Erreur : impossible de connecter l'add-on au Viewer Trimble Connect.");
+      }
+    }
+
+    function trouverValeurEtat(objectProperties) {
+      if (!objectProperties || !objectProperties.properties) {
+        return null;
+      }
+
+      for (const propertySet of objectProperties.properties) {
+        if (!propertySet.properties) {
+          continue;
+        }
+
+        for (const prop of propertySet.properties) {
+          const nomPropriete = normaliserTexte(prop.name);
+          const valeurPropriete = normaliserTexte(prop.value);
+
+          /*
+            On cherche une propriété nommée ETAT.
+            Le test includes("ETAT") permet aussi de retrouver des noms du type :
+            - PSET_VRD.ETAT
+            - IC34_ETAT
+            - Etat ouvrage
+          */
+          if (nomPropriete === "ETAT" || nomPropriete.includes("ETAT")) {
+            if (CONFIG_ETAT[valeurPropriete]) {
+              return valeurPropriete;
+            }
+          }
+        }
+      }
+
+      return null;
+    }
+
+    function trouverTexteParMotsCles(objectProperties, motsCles) {
+      if (!objectProperties || !objectProperties.properties) {
+        return null;
+      }
+
+      for (const propertySet of objectProperties.properties) {
+        if (!propertySet.properties) {
+          continue;
+        }
+
+        for (const prop of propertySet.properties) {
+          const nomPropriete = normaliserTexte(prop.name);
+          const correspond = motsCles.some((motCle) => nomPropriete.includes(motCle));
+
+          if (correspond) {
+            const valeurBrute = String(prop.value || "").trim();
+            if (valeurBrute) {
+              return valeurBrute;
+            }
+          }
+        }
+      }
+
+      return null;
+    }
+
+    function obtenirNomObjet(objectProperties) {
+      const nomProduit = objectProperties.product && objectProperties.product.name
+        ? String(objectProperties.product.name).trim()
+        : "";
+
+      if (nomProduit) {
+        return nomProduit;
+      }
+
+      if (objectProperties.class) {
+        return `${objectProperties.class} #${objectProperties.id}`;
+      }
+
+      return `Objet #${objectProperties.id}`;
+    }
+
+    function couperTableau(tableau, taille) {
+      const morceaux = [];
+      for (let i = 0; i < tableau.length; i += taille) {
+        morceaux.push(tableau.slice(i, i + taille));
+      }
+      return morceaux;
+    }
+
+    // Récupère, pour chaque état, la liste des éléments {id, nom, zone} regroupés par modèle.
+    // onProgress(lotsTraites, totalLots) permet d'alimenter la barre de progression.
+    async function recupererObjetsParEtat(onProgress) {
+      const groupesParEtat = {
+        "DEGRADE": {},
+        "MEDIOCRE": {},
+        "SATISFAISANT": {},
+        "CORRECT": {}
+      };
+
+      const objetsModele = await API.viewer.getObjects();
+
+      const lots = [];
+      for (const groupeModele of objetsModele) {
+        const modelId = groupeModele.modelId;
+        const objectIds = groupeModele.objects.map((obj) => obj.id);
+
+        for (const morceau of couperTableau(objectIds, 500)) {
+          lots.push({ modelId, morceau });
+        }
+      }
+
+      const totalLots = lots.length;
+      let lotsTraites = 0;
+
+      for (const lot of lots) {
+        const proprietesObjets = await API.viewer.getObjectProperties(lot.modelId, lot.morceau);
+
+        for (const objet of proprietesObjets) {
+          const etat = trouverValeurEtat(objet);
+
+          if (etat) {
+            if (!groupesParEtat[etat][lot.modelId]) {
+              groupesParEtat[etat][lot.modelId] = [];
+            }
+
+            groupesParEtat[etat][lot.modelId].push({
+              id: objet.id,
+              nom: obtenirNomObjet(objet),
+              zone: trouverTexteParMotsCles(objet, MOTS_CLES_ZONE) || "—"
+            });
+          }
+        }
+
+        lotsTraites++;
+        if (onProgress) {
+          onProgress(lotsTraites, totalLots);
+        }
+      }
+
+      return groupesParEtat;
+    }
+
+    // Renvoie les groupes en cache s'ils existent déjà, sinon relance un scan complet.
+    async function obtenirGroupes(forcerRafraichissement = false) {
+      if (dernierGroupes && !forcerRafraichissement) {
+        return dernierGroupes;
+      }
+
+      dernierGroupes = await recupererObjetsParEtat(majProgression);
+      return dernierGroupes;
+    }
+
+    async function appliquerCouleur(modelId, objectIds, couleur) {
+      if (!objectIds || objectIds.length === 0) {
+        return;
+      }
+
+      const morceaux = couperTableau(objectIds, 500);
+
+      for (const ids of morceaux) {
+        await API.viewer.setObjectState(
+          {
+            modelObjectIds: [
+              {
+                modelId: modelId,
+                objectRuntimeIds: ids,
+                recursive: false
+              }
+            ]
+          },
+          {
+            color: couleur,
+            visible: true
+          }
+        );
+      }
+    }
+
+    async function resetEtatViewer() {
+      await API.viewer.setObjectState(undefined, {
+        color: "reset",
+        visible: "reset"
+      });
+    }
+
+    function activerTraitement(actif) {
+      enTraitement = actif;
+      document.getElementById("btnColoriserTout").disabled = actif;
+      document.getElementById("btnReset").disabled = actif;
+      document.querySelectorAll(".legend-row").forEach((el) => {
+        el.classList.toggle("disabled", actif);
+      });
+    }
+
+    function afficherProgression(actif) {
+      const barreConteneur = document.getElementById("loadingProgress");
+      const texteConteneur = document.getElementById("loadingProgressText");
+
+      if (actif) {
+        barreConteneur.classList.remove("hidden");
+        texteConteneur.classList.remove("hidden");
+        majProgression(0, 0);
+      } else {
+        barreConteneur.classList.add("hidden");
+        texteConteneur.classList.add("hidden");
+      }
+    }
+
+    function majProgression(lotsTraites, totalLots) {
+      const barre = document.getElementById("loadingProgressBar");
+      const texte = document.getElementById("loadingProgressText");
+      const pourcentage = totalLots > 0 ? Math.round((lotsTraites / totalLots) * 100) : 0;
+
+      barre.style.width = `${pourcentage}%`;
+      texte.textContent = totalLots > 0
+        ? `Analyse en cours... lot ${lotsTraites}/${totalLots}`
+        : "Analyse en cours...";
+    }
+
+    function majBadges(groupes) {
+      for (const etat of Object.keys(CONFIG_ETAT)) {
+        const parModele = groupes[etat] || {};
+        let total = 0;
+
+        for (const modelId of Object.keys(parModele)) {
+          total += parModele[modelId].length;
+        }
+
+        const badgeEl = document.getElementById(`badge-${etat}`);
+        if (badgeEl) {
+          badgeEl.textContent = String(total);
+        }
+      }
+    }
+
+    function reinitialiserBadges() {
+      for (const etat of Object.keys(CONFIG_ETAT)) {
+        const badgeEl = document.getElementById(`badge-${etat}`);
+        if (badgeEl) {
+          badgeEl.textContent = "–";
+        }
+      }
+    }
+
+    // Affiche, sous chaque état concerné, la liste "Nom élément — Zone" des éléments trouvés.
+    // `groupes` ne contient que les états à afficher (un seul en cas de filtre, quatre après
+    // "Coloriser tous les états").
+    function rendreResultats(groupes) {
+      const ul = document.getElementById("summary");
+      ul.innerHTML = "";
+
+      let totalGeneral = 0;
+
+      for (const etat of Object.keys(CONFIG_ETAT)) {
+        const parModele = groupes[etat];
+        if (!parModele) {
+          continue;
+        }
+
+        const elements = [];
+        for (const modelId of Object.keys(parModele)) {
+          elements.push(...parModele[modelId]);
+        }
+
+        if (elements.length === 0) {
+          continue;
+        }
+
+        totalGeneral += elements.length;
+
+        const titre = document.createElement("li");
+        titre.className = "summary-section-title";
+
+        const swatch = document.createElement("span");
+        swatch.className = "legend-swatch small";
+        swatch.style.background = CONFIG_ETAT[etat].color;
+
+        const texteTitre = document.createElement("span");
+        texteTitre.className = "summary-item-text";
+        texteTitre.textContent = CONFIG_ETAT[etat].label;
+
+        const badgeTitre = document.createElement("span");
+        badgeTitre.className = "badge";
+        badgeTitre.textContent = String(elements.length);
+
+        titre.append(swatch, texteTitre, badgeTitre);
+        ul.appendChild(titre);
+
+        for (const item of elements) {
+          const li = document.createElement("li");
+
+          const nomSpan = document.createElement("span");
+          nomSpan.className = "summary-item-text";
+          nomSpan.textContent = item.nom;
+          nomSpan.title = item.nom;
+
+          const zoneSpan = document.createElement("span");
+          zoneSpan.className = "summary-zone";
+          zoneSpan.textContent = item.zone;
+
+          li.append(nomSpan, zoneSpan);
+          ul.appendChild(li);
+        }
+      }
+
+      document.getElementById("resultCount").textContent = totalGeneral > 0
+        ? `${totalGeneral} élément(s) trouvé(s)`
+        : "Aucun résultat pour le moment.";
+    }
+
+    async function coloriserTousEtats() {
+      if (enTraitement) return;
+      activerTraitement(true);
+
+      try {
+        setStatus("Analyse des attributs IFC en cours...");
+        afficherProgression(true);
+
+        await resetEtatViewer();
+
+        const groupes = await obtenirGroupes(true);
+        majBadges(groupes);
+
+        let totalGeneral = 0;
+
+        for (const etat of Object.keys(CONFIG_ETAT)) {
+          const parModele = groupes[etat];
+
+          for (const modelId of Object.keys(parModele)) {
+            const ids = parModele[modelId].map((o) => o.id);
+            totalGeneral += ids.length;
+            await appliquerCouleur(modelId, ids, CONFIG_ETAT[etat].color);
+          }
+        }
+
+        rendreResultats(groupes);
+        setStatus(`Colorisation terminée : ${totalGeneral} objet(s) au total.`);
+      } catch (error) {
+        console.error(error);
+        setStatus("Erreur pendant la colorisation. Vérifie que les IFC sont bien ouverts dans le Viewer 3D et que l'attribut ETAT existe.");
+      } finally {
+        afficherProgression(false);
+        activerTraitement(false);
+      }
+    }
+
+    async function filtrerEtat(etat) {
+      if (enTraitement) return;
+      activerTraitement(true);
+
+      try {
+        const label = CONFIG_ETAT[etat].label;
+        setStatus(`Recherche des éléments ${label}...`);
+        afficherProgression(true);
+
+        const groupes = await obtenirGroupes();
+        majBadges(groupes);
+
+        // On masque tout, puis on ne colore/affiche que l'état recherché.
+        await API.viewer.setObjectState(undefined, { visible: false });
+
+        const parModele = groupes[etat];
+        const selecteurCamera = [];
+        let total = 0;
+
+        for (const modelId of Object.keys(parModele)) {
+          const ids = parModele[modelId].map((o) => o.id);
+          total += ids.length;
+          await appliquerCouleur(modelId, ids, CONFIG_ETAT[etat].color);
+
+          if (ids.length > 0) {
+            selecteurCamera.push({ modelId, objectRuntimeIds: ids, recursive: false });
+          }
+        }
+
+        if (selecteurCamera.length > 0) {
+          await API.viewer.setCamera(
+            { modelObjectIds: selecteurCamera },
+            { animationTime: 500 }
+          );
+        }
+
+        rendreResultats({ [etat]: parModele });
+        setStatus(`${label} : ${total} élément(s) trouvé(s).`);
+      } catch (error) {
+        console.error(error);
+        setStatus("Erreur pendant le filtrage.");
+      } finally {
+        afficherProgression(false);
+        activerTraitement(false);
+      }
+    }
+
+    async function resetAffichage() {
+      if (enTraitement) return;
+
+      try {
+        await resetEtatViewer();
+        dernierGroupes = null;
+
+        reinitialiserBadges();
+        document.getElementById("summary").innerHTML = "";
+        document.getElementById("resultCount").textContent = "Aucun résultat pour le moment.";
+
+        setStatus("Affichage réinitialisé.");
+      } catch (error) {
+        console.error(error);
+        setStatus("Erreur pendant la réinitialisation.");
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
